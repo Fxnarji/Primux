@@ -113,8 +113,24 @@
      <string>Folders</string>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_3">
+     <property name="rightMargin">
+      <number>10</number>
+     </property>
      <item>
-      <widget class="QListWidget" name="asset_list"/>
+      <widget class="QListWidget" name="asset_list">
+       <property name="autoFillBackground">
+        <bool>true</bool>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="editTriggers">
+        <set>QAbstractItemView::DoubleClicked</set>
+       </property>
+       <property name="showDropIndicator" stdset="0">
+        <bool>false</bool>
+       </property>
+      </widget>
      </item>
     </layout>
    </widget>
@@ -153,7 +169,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>PopulateList</string>
+      <string>Open Project</string>
      </property>
     </widget>
    </widget>

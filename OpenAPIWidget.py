@@ -1,7 +1,20 @@
-from PySide6.QtWidgets import QListWidgetItem, QListWidget, QListView, QWidget, QVBoxLayout, QMainWindow, QPushButton, QLineEdit, QLabel, QScrollArea
+from PySide6.QtWidgets import (
+    QMainWindow, QPushButton, QListWidget, QListWidgetItem,
+    QLineEdit, QLabel
+)
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, QFile
 from server import start
+import os
+
+def load_asset_wgt(path):
+    loader = QUiLoader()
+    file = QFile(path)
+    file.open(QFile.ReadOnly)
+    widget = loader.load(file)
+    file.close()
+    return widget
+
 
 class OpenAPIWidget(QMainWindow):
     def __init__(self):
@@ -9,19 +22,14 @@ class OpenAPIWidget(QMainWindow):
 
         loader = QUiLoader()
         self.ui = loader.load("UI/Testui.ui", None)
-
         self.setCentralWidget(self.ui)
-
         self.setFixedSize(1212, 510)
 
-        self.button = self.ui.findChild(QPushButton,"bt_start_server")
-        self.populate_list = self.ui.findChild(QPushButton,"bt_populate_list")
-        self.asset_list = self.ui.findChild(QListView, "asset_list")
+        self.button = self.ui.findChild(QPushButton, "bt_start_server")
+        self.asset_list = self.ui.findChild(QListWidget, "asset_list")
         self.port = self.ui.findChild(QLineEdit, "inpt_port")
         self.status = self.ui.findChild(QLabel, "out_status")
 
-
-        self.populate_list.clicked.connect(self.load_assets)
         self.button.clicked.connect(self.start_server)
 
     def start_server(self):
@@ -29,24 +37,30 @@ class OpenAPIWidget(QMainWindow):
         try:
             start(int(port))
             self.status.setStyleSheet("color: green;")
-            self.status.setText(f"running")
-        except:
+            self.status.setText("Running")
+        except Exception as e:
+            print(e)
             self.status.setStyleSheet("color: red;")
-            self.status.setText(f"failed to Start!")
-    
-    def load_assets(self):
-        self.asset_list_widget = QListWidget()
-        self.asset_list.setWidget(self.asset_list_widget)  # replace scroll area's widget
+            self.status.setText("Failed to start!")
 
-        for i in range(4):
-            item = QListWidgetItem()
-            item.setSizeHint(QSize(300, 50))  # set item size
-            
-            asset_widget = QWidget()
-            layout = QVBoxLayout(asset_widget)
-            label = QLabel(f"Asset {i+1}")
-            layout.addWidget(label)
+    def load_asset(self, asset_name):
+        item = QListWidgetItem()
+        item.setSizeHint(QSize(220, 35))
+        asset_widget = load_asset_wgt("UI/asset.ui")
 
-            self.asset_list_widget.addItem(item)
-            self.asset_list_widget.setItemWidget(item, asset_widget)
-        self.asset_list_widget.setSelectionMode(QListWidget.SingleSelection)    
+        # Set label inside custom widget if it exists
+        label = asset_widget.findChild(QLabel, "asset_name")
+        if label:
+            label.setText(asset_name)
+
+        self.asset_list.addItem(item)
+        self.asset_list.setItemWidget(item, asset_widget)
+
+    def load_directory(self, path):
+        if not os.path.isdir(path):
+            print(f"Path '{path}' is not a valid directory.")
+            return
+
+        folders = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
+        for folder in folders:
+            self.load_asset(folder)
