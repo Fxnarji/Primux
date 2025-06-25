@@ -6,12 +6,9 @@ import os
 app = QApplication(sys.argv)
 
 window = OpenAPIWidget()
+project = os.path.join("/home/fxnarji/Documents/Primux_sample")
 
-root = "/home/fxnarji/Documents/Primux_sample"
-assets = os.path.join(root, "_assets")
-
-window.path = assets
-OpenAPIWidget.load_directory(window)
+window.load_project(path = project)
 
 
 window.setWindowTitle("test")
