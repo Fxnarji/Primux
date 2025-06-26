@@ -1,8 +1,9 @@
 from pathlib import Path
+import shutil
 
 class ProjectContext:
     def __init__(self):
-        self._project_root: Path | None = None
+        self._project_root = Path(r"C:\Users\Fxnarji\Documents\GitHub\Primux\SampleStructure\NewProject")
 
     def set_project(self, root: Path):
         root = root.resolve()
@@ -26,3 +27,15 @@ class ProjectContext:
         self.assets_path.mkdir(parents=True, exist_ok=True)
         self.thumbnails_path.mkdir(parents=True, exist_ok=True)
         self.metadata_path.mkdir(parents=True, exist_ok=True)
+    
+    
+    def create_folder(self, path):
+        new_folder_path = self.assets_path / path
+        print(f"created folder at: {new_folder_path}")
+        new_folder_path.mkdir()
+    
+    def delete_directory(self,path):
+        folder_path = self.assets_path / path
+        print(f"deleted folder @: {folder_path}")
+        shutil.rmtree(folder_path)
+

@@ -5,14 +5,17 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QLabel, 
     QMenu,
-    QTreeView
+    QTreeView,
+    QMenu,
+    QInputDialog, 
+    QLineEdit
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem
-from PySide6.QtCore import QSize, QModelIndex, Qt
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
+from PySide6.QtCore import QSize, QModelIndex, Qt, QPoint
 from pathlib import Path
 import os
 
-from core.context import ProjectContext
+from core import ProjectContext
 from ui.loader import load_ui_widget
 from server import Server
 
@@ -25,7 +28,6 @@ class Primux(QMainWindow):
         self.Server = Server()
         self.context_menu = QMenu(self)
 
-        new_folder = self.context_menu.addAction("New Folder")
 
         self.context = context
         self.init_ui()
@@ -41,14 +43,14 @@ class Primux(QMainWindow):
 
 
         self.model = QStandardItemModel()
-        self.model.setHorizontalHeaderLabels(["Assets"])
+        self.model.setHorizontalHeaderLabels(["text"])
 
-        self.tw_project_tree: QTreeView = self.ui.findChild(QTreeView, "treeView")
+        self.tw_project_tree: QTreeView = self.ui.findChild(QTreeView, "project_tree_view")
         self.tw_project_tree.setModel(self.model)
         self.tw_project_tree.setHeaderHidden(True)
         self.tw_project_tree.expandAll()
         self.tw_project_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tw_project_tree.setContextMenuPolicy(Qt.ActionsContextMenu)
+        self.tw_project_tree.customContextMenuRequested.connect(self.show_project_context_menu)
         self.tw_project_tree.setStyleSheet("""
             QTreeView::item {
                 height: 30px;
@@ -57,9 +59,19 @@ class Primux(QMainWindow):
         """)
         self.wl_step_list: QListWidget = self.ui.findChild(QListWidget, "asset_step_list")
 
-
     def connect_signals(self):
         self.tw_project_tree.clicked.connect(self.load_asset_steps)
+
+    def get_user_input(self, parent = None):
+        text, ok = QInputDialog.getText(
+            parent,
+            "New Folder",
+            "Enter folder Name:",
+            QLineEdit.Normal
+        )
+        if ok and text:
+            return text
+        return None
 
     def add_asset_item(self, name: str, target_list: QListWidget):
         item = QListWidgetItem()
@@ -121,11 +133,62 @@ class Primux(QMainWindow):
             add_folder_to_item(root_item, root_path)
     
     def create_new_folder(self):
-        print("created folder")
-    
-    def eventFilter(self, watched, event):
-        return super().eventFilter(watched, event)
 
-    def contextMenuEvent(self, event):
-        self.context_menu.exec(event.globalPos())
-        return super().contextMenuEvent(event)
+        folder_name = self.get_user_input(None)
+
+        index = self.tw_project_tree.currentIndex()
+        if index is None:
+            return
+        
+        print(f"index: {index}")
+        item_path = self.get_item_path_str(index)
+        if Path is not None:
+            folder_path = Path(item_path) / folder_name
+        else:
+            folder_path = folder_name
+        self.context.create_folder(folder_path)
+        self.load_project_tree()
+
+    def delete_folder(self):
+        index = self.tw_project_tree.currentIndex()
+        if index is None:
+            return
+        folder_path = self.get_item_path_str(index)
+        self.context.delete_directory(folder_path)
+        self.load_project_tree()
+
+    def get_item_path(self,index):
+        path = []
+        while index.isValid():
+            item = index.model().itemFromIndex(index)
+            path.insert(0, item.text())  # Prepend to keep order from root to leaf
+            index = index.parent()
+        return path
+
+    def get_item_path_str(self,index, separator="/"):
+        return separator.join(self.get_item_path(index))
+
+    def show_project_context_menu(self, position: QPoint):
+        
+        index = self.tw_project_tree.indexAt(position)
+
+        menu = QMenu()
+
+        rename_action = QAction("Rename", self)
+        delete_action = QAction("Delete", self)
+        new_folder_action = QAction("New Folder", self)
+        new_asset_action = QAction("New Asset", self)
+
+        # Connect to appropriate methods
+        rename_action.triggered.connect(lambda: print("Rename"))
+        delete_action.triggered.connect(self.delete_folder)
+        new_folder_action.triggered.connect(self.create_new_folder)
+        new_asset_action.triggered.connect(lambda: print("New Asset"))
+
+        menu.addAction(rename_action)
+        menu.addAction(delete_action)
+        menu.addSeparator()
+        menu.addAction(new_folder_action)
+        menu.addAction(new_asset_action)
+
+        menu.exec(self.tw_project_tree.viewport().mapToGlobal(position))
