@@ -1,17 +1,17 @@
+# main.py
 import sys
 from PySide6.QtWidgets import QApplication
-from OpenAPIWidget import OpenAPIWidget
-import os
+from pathlib import Path
 
-app = QApplication(sys.argv)
+from core.context import ProjectContext
+from core.Primux import Primux
 
-window = OpenAPIWidget()
-project = os.path.join("/home/fxnarji/Documents/Primux_sample")
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
 
-window.load_project(path = project)
+    context = ProjectContext()
+    context.set_project(Path(r"C:\Users\Fxnarji\Documents\GitHub\Primux\SampleStructure\NewProject"))
 
+    primux = Primux(context)
 
-window.setWindowTitle("test")
-window.show()
-
-sys.exit(app.exec())
+    sys.exit(app.exec())
