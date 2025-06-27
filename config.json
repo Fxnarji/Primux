@@ -1,5 +1,12 @@
 {
   "port": 8000,
   "host": "127.0.0.1",
-  "window_size": [1300, 510]
+  "window_size": [1300, 510],
+  "steps":{
+    "_mod" : "modeling",
+    "_tex": "texturing",
+    "_rig": "rigging",
+    "_anim": "animation",
+    "_lgt": "lighting"
+  }
 }

@@ -1,5 +1,6 @@
 from pathlib import Path
 import shutil
+import json
 
 class ProjectContext:
     def __init__(self):
@@ -39,3 +40,21 @@ class ProjectContext:
         print(f"deleted folder @: {folder_path}")
         shutil.rmtree(folder_path)
 
+    def rename_folder(self, old_path, new_path):
+        old_path.rename(new_path)
+
+    def create_Asset(self, path, name):
+        asset_path_relative = Path(path) / Path(name)
+        asset_path_abs = self.assets_path / asset_path_relative
+        asset_path_abs.mkdir()
+        asset_data = {
+            "name": name,
+            "author": "me"
+        }
+        version_info_path = asset_path_abs / "versioninfo.json"
+
+        version_info_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(version_info_path)
+        with version_info_path.open ("w") as f:
+            json.dump(asset_data, f, indent = 4)
