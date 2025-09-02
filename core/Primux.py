@@ -131,7 +131,7 @@ class Primux(QMainWindow):
             return
 
         # List all .blend files in the folder
-        for file_path in sorted(leaf_folder_path.iterdir()):
+        for file_path in sorted(leaf_folder_path.iterdir(), reverse = True):
             if file_path.is_file() and file_path.suffix == ".blend" and "master" not in file_path.name:
                 name = file_path.name[16:-6]
                 self.add_widget(self.wl_file_list, name, file_path)
