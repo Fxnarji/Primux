@@ -10,7 +10,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     context = ProjectContext()
-    context.set_project(Path(r"C:\Users\Fxnarji\Documents\GitHub\Primux\SampleStructure\NewProject"))
 
     primux = Primux(context)
 

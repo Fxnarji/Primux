@@ -1,41 +1,34 @@
-# UI.py or core/app.py (wherever your PrimuxCore class lives)
+# UI.py or core/app.py
 from PySide6.QtWidgets import (
-    QMainWindow, 
-    QListWidget, 
+    QMainWindow,
+    QListWidget,
     QListWidgetItem,
-    QLabel, 
     QMenu,
     QTreeView,
-    QMenu,
-    QInputDialog, 
-    QLineEdit
+    QPushButton,
 )
-from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
-from PySide6.QtCore import QSize, QModelIndex, Qt, QPoint
+from PySide6.QtGui import QStandardItemModel, QStandardItem
+from PySide6.QtCore import Qt, QModelIndex
 from pathlib import Path
-import os
 
 from core import ProjectContext
 from .util import ConfigHelper
-from ui.loader import load_ui_widget
-from server import Server
+from ui.loader import load_ui_widget, create_asset_widget
+import subprocess, sys, os
+
 
 class Primux(QMainWindow):
-    UI_PATH_MAIN = "UI/Testui copy.ui"
+    UI_PATH_MAIN = "UI/MainWindow.ui"
     UI_PATH_ASSET = "UI/asset.ui"
 
     def __init__(self, context: ProjectContext):
         super().__init__()
-        self.Server = Server()
         self.context_menu = QMenu(self)
         self.config = ConfigHelper()
 
-
         self.context = context
         self.init_ui()
-        self.connect_signals()
         self.load_project_tree()
-        self.Server.start()
         self.show()
 
     def init_ui(self):
@@ -43,7 +36,7 @@ class Primux(QMainWindow):
         self.setCentralWidget(self.ui)
         self.setFixedSize(1300, 510)
 
-
+        # Tree model
         self.model = QStandardItemModel()
         self.model.setHorizontalHeaderLabels(["text"])
 
@@ -52,7 +45,6 @@ class Primux(QMainWindow):
         self.tw_project_tree.setHeaderHidden(True)
         self.tw_project_tree.expandAll()
         self.tw_project_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tw_project_tree.customContextMenuRequested.connect(self.show_project_context_menu)
         self.tw_project_tree.setStyleSheet("""
             QTreeView::item {
                 height: 30px;
@@ -60,89 +52,93 @@ class Primux(QMainWindow):
             }
         """)
 
+        # QListWidget for leaf folders
         self.wl_step_list: QListWidget = self.ui.findChild(QListWidget, "asset_step_list")
         self.wl_step_list.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.wl_step_list.customContextMenuRequested.connect(self.show_steps_context_menu)
 
-    def connect_signals(self):
-        self.tw_project_tree.clicked.connect(self.load_asset_steps)
+        # QListWidget for Files
+        self.wl_file_list: QListWidget = self.ui.findChild(QListWidget, "file_list")
+        self.wl_file_list.setContextMenuPolicy(Qt.CustomContextMenu)
 
-    def get_user_input(self, name = "Folder", parent = None):
-        text, ok = QInputDialog.getText(
-            parent,
-            f"New {name}",
-            f"Enter {name} Name:",
-            QLineEdit.Normal
-        )
-        if ok and text:
-            return text
-        return None
+        # Button for opening Files
+        self.bt_open_file: QPushButton = self.ui.findChild(QPushButton, "open_file")
+        self.wl_step_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.bt_open_file.clicked.connect(self.on_open_file_clicked)
 
-    def add_asset_item(self, name: str, target_list: QListWidget):
-        item = QListWidgetItem()
-        item.setSizeHint(QSize(100, 35))
 
-        widget = load_ui_widget(self.UI_PATH_ASSET)
-        label = widget.findChild(QLabel, "asset_name")
-        if label:
-            label.setText(name)
-            target_list.addItem(item)
-            target_list.setItemWidget(item, widget)
+        # Connect selection signals
+        self.tw_project_tree.selectionModel().currentChanged.connect(self.on_tree_selection_changed)
+        self.wl_step_list.currentItemChanged.connect(self.on_step_list_selection_changed)
 
-    def load_asset_steps(self):
-        self.wl_step_list.clear()
-        steps = self.config.get("steps")
-
-        index: QModelIndex = self.tw_project_tree.currentIndex()
-        if not index.isValid():
-            return
-
-        # Reconstruct folder path
-        item = self.model.itemFromIndex(index)
-        parts = []
-        while item:
-            parts.insert(0, item.text())
-            item = item.parent()
-
-        selected_path = self.context.assets_path.joinpath(*parts)
-
-        if not selected_path.is_dir():
-            return
-
-        for name in sorted(os.listdir(selected_path)):
-            full_path = selected_path / name
-            if full_path.is_dir() and name.startswith("_"):
-                displayname = steps.get(name, "Error")
-                self.add_asset_item(displayname, self.wl_step_list)
+    # --- Tree Population ---
 
     def load_project_tree(self):
         self.model.clear()
         assets_root = self.context.assets_path
 
-        def add_folder_to_item(parent_item, folder_path: Path):
-            for name in sorted(os.listdir(folder_path)):
-                if name.startswith("_"):
-                    continue
-                full_path = folder_path / name
-                if not full_path.is_dir():
-                    continue
-                item = QStandardItem(name)
-                item.setEditable(False)
-                parent_item.appendRow(item)
-                add_folder_to_item(item, full_path)
-
-
-        for folder in sorted(os.listdir(assets_root)):
-            root_path = assets_root / folder
-            if folder.startswith("_") or not root_path.is_dir():
+        for folder in sorted(assets_root.iterdir(), key=lambda p: p.name):
+            if not folder.is_dir():
                 continue
-
-            root_item = QStandardItem(folder)
+            root_item = QStandardItem(folder.name)
             root_item.setEditable(False)
+            root_item.setData(folder, Qt.UserRole)  # store full path
             self.model.appendRow(root_item)
-            add_folder_to_item(root_item, root_path)
+            self.add_subfolders_to_tree(root_item, folder)
 
-    def get_item_path(self,index):
+    def add_subfolders_to_tree(self, parent_item, folder_path: Path):
+        # List immediate subdirectories
+        subdirs = [p for p in sorted(folder_path.iterdir()) if p.is_dir()]
+
+        # Filter out leaf folders (folders with no subfolders)
+        subdirs = [p for p in subdirs if any(c.is_dir() for c in p.iterdir())]
+
+        for subdir in subdirs:
+            item = QStandardItem(subdir.name)
+            item.setEditable(False)
+            item.setData(subdir, Qt.UserRole)  # store full path
+            parent_item.appendRow(item)
+            self.add_subfolders_to_tree(item, subdir)
+
+    # --- Leaf Folder Handling ---
+
+    def on_tree_selection_changed(self, current: QModelIndex, previous: QModelIndex):
+        self.wl_step_list.clear()
+
+        if not current.isValid():
+            return
+
+        item = current.model().itemFromIndex(current)
+        folder_path: Path = item.data(Qt.UserRole)
+        if not folder_path or not folder_path.is_dir():
+            return
+
+        # List immediate subfolders
+        subdirs = [p for p in folder_path.iterdir() if p.is_dir()]
+
+        # Only include leaf folders (no subfolders themselves)
+        leaf_subdirs = [p for p in subdirs if not any(c.is_dir() for c in p.iterdir())]
+        for leaf in sorted(leaf_subdirs, key=lambda p: p.name):
+            self.add_widget(self.wl_step_list, leaf.name, leaf)
+
+    def on_step_list_selection_changed(self, current, previous):
+        self.wl_file_list.clear()
+        if current is None:
+            return
+
+        # Retrieve the full path of the selected leaf folder
+        leaf_folder_path: Path = current.data(Qt.UserRole)
+        if not leaf_folder_path or not leaf_folder_path.is_dir():
+            return
+
+        # List all .blend files in the folder
+        for file_path in sorted(leaf_folder_path.iterdir()):
+            if file_path.is_file() and file_path.suffix == ".blend" and "master" not in file_path.name:
+                name = file_path.name[16:-6]
+                self.add_widget(self.wl_file_list, name, file_path)
+
+    # --- Utility ---
+
+    def get_item_path(self, index: QModelIndex):
         path = []
         while index.isValid():
             item = index.model().itemFromIndex(index)
@@ -150,129 +146,29 @@ class Primux(QMainWindow):
             index = index.parent()
         return path
 
-    def get_item_path_str(self,index, separator="/"):
-        return separator.join(self.get_item_path(index))
+    def add_widget(self, list_widget, name, path: Path = None):
+        widget = create_asset_widget(self, name)
+        list_item = QListWidgetItem(list_widget)
+        list_item.setSizeHint(widget.sizeHint())
+        if path:
+            list_item.setData(Qt.UserRole, path)  # store path in item
+        list_widget.addItem(list_item)
+        list_widget.setItemWidget(list_item, widget)
 
-
-
-# TREE VIEW CONTEXT MENU
-
-    def create_new_folder(self):
-        folder_name = self.get_user_input(None)
-        if not folder_name:
-            return
-
-        index = self.tw_project_tree.currentIndex()
-        if index.isValid():
-            parent_path = self.get_item_path_str(index)
-        else:
-            parent_path = self.context.assets_path
-        new_folder_path = Path(parent_path) / folder_name
-
-
-        # Create the folder in the filesystem or data context
-        self.context.create_folder(new_folder_path)
-
-        # Add new item to the tree model
-        model = self.tw_project_tree.model()
-        parent_item = model.itemFromIndex(index)
-
-        if parent_item is None:
-            self.load_project_tree()
-
-        # Optional: sort children alphabetically (can be omitted)
-        new_item = QStandardItem(folder_name)
-        new_item.setEditable(False)
-        parent_item.appendRow(new_item)
-
-        # Expand the parent so the new item becomes visible
-        self.tw_project_tree.expand(index)
-
-    def create_new_asset(self):
-        name = self.get_user_input(name = "Asset")
-        index = self.tw_project_tree.currentIndex()
-        if index is None:
-            return
-        folder_path = self.get_item_path_str(index) 
-        self.context.create_Asset(folder_path, name)
-
-    def delete_folder(self):
-        index = self.tw_project_tree.currentIndex()
-        if index is None:
-            return
-        folder_path = self.get_item_path_str(index)
-        self.context.delete_directory(folder_path)
-
-        model = self.tw_project_tree.model()
-        item = model.itemFromIndex(index)
-
-        if item:
-            parent = item.parent()
-            if parent:
-                parent.removeRow(item.row())
-            else:
-                model.removeRow(item.row())
-
-    def rename_folder(self):
-        new_name = self.get_user_input(None)
-        index = self.tw_project_tree.currentIndex()
-        if index is None:
-            return
-        folder_path = self.get_item_path_str(index)
-        self.context.delete_directory(folder_path)
-
-        self.context.rename_folder(folder_path, new_name)
-
-    def show_project_context_menu(self, position: QPoint):
+    def on_open_file_clicked(self):
+        # Get current selection from file_list
+        current_item = self.wl_file_list.currentItem()
+        if current_item is None:
+            return  # nothing selected
         
-        index = self.tw_project_tree.indexAt(position)
+        file_path: Path = current_item.data(Qt.UserRole)
+        if file_path is None or not file_path.exists():
+            return
 
-        menu = QMenu()
-
-        rename_action = QAction("Rename", self)
-        delete_action = QAction("Delete", self)
-        new_folder_action = QAction("New Folder", self)
-        new_asset_action = QAction("New Asset", self)
-
-        # Connect to appropriate methods
-        rename_action.triggered.connect(self.rename_folder)
-        delete_action.triggered.connect(self.delete_folder)
-        new_folder_action.triggered.connect(self.create_new_folder)
-        new_asset_action.triggered.connect(self.create_new_asset)
-
-        menu.addAction(rename_action)
-        menu.addAction(delete_action)
-        menu.addSeparator()
-        menu.addAction(new_folder_action)
-        menu.addAction(new_asset_action)
-
-        menu.exec(self.tw_project_tree.viewport().mapToGlobal(position))
-
-
-# STEPS CONTEXT MENU
-
-    def create_step(self, name):
-        index = self.tw_project_tree.currentIndex()
-        path = self.get_item_path_str(index)
-        print(path)
-        new_folder_path = self.context.assets_path / path / name
-        print(new_folder_path)
-        self.context.create_folder(new_folder_path)
-        self.load_asset_steps()
-
-    def show_steps_context_menu(self, position: QPoint):
-
-        menu = QMenu()
-        steps = self.config.get("steps")
-        print(steps)
-
-        default_action = QAction("test", self)
-        menu.addAction(default_action)
-        print("context menu open!")
-        for suffix, step_name in steps.items():
-            print("test")
-            action = QAction(step_name,menu)
-            action.triggered.connect(lambda checked=False, s=suffix: self.create_step(s))
-            menu.addAction(action)
-        
-        menu.exec(self.wl_step_list.viewport().mapToGlobal(position))
+        # Open depending on OS
+        if sys.platform.startswith("darwin"):      # macOS
+            subprocess.call(("open", file_path))
+        elif os.name == "nt":                      # Windows
+            os.startfile(file_path)
+        elif os.name == "posix":                   # Linux
+            subprocess.call(("xdg-open", file_path))
