@@ -32,16 +32,18 @@ class Primux(QMainWindow):
 
     def __init__(self, context: ProjectContext):
         super().__init__()
-        self.context_menu = QMenu(self)
-        self.config = ConfigHelper()
         self.context = context
-
-        # keep track of which root is active
         self.current_root = None  
 
         self.init_ui()
-        self.set_root(self.context.show_path)  # default: Show
+
+        if not self.context.project_root:
+            self.on_open_project_clicked()
+        else:
+            self.set_root(self.context.show_path)
+
         self.show()
+
 
     def init_ui(self):
         self.ui = load_ui_widget(self.UI_PATH_MAIN)
