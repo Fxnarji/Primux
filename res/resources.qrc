@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>Placeholder.png</file>
+
+        <file>icon_blender.png</file>
+        <file>icon_painter.png</file>
+        <file>icon_pureref.png</file>
+        <file>icon_fbx.png</file>
+
+
+
+        <file>icon_render.png</file>
+        <file>icon_anim.png</file>
+        <file>icon_lighting.png</file>
+        <file>icon_vfx.png</file>
+        <file>icon_environment.png</file>
+
+    </qresource>
+</RCC>
+<!-- pyside6-rcc res/resources.qrc -o ui/resources_rc.py -->
